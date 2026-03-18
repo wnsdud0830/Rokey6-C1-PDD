@@ -9,7 +9,7 @@
 ## 1. 시스템 설계, 플로우 차트 그림
 
 ### 1-1. 시스템 설계도 (System Architecture)
-![System Architecture](./readme_with_images/images/system_architecture.png)
+![System Architecture](./readme_with_images/images/hardware.png)
 
 **구성 요약**
 - **ROS2 제어 파트(로봇 PC)**
