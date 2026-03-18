@@ -1,0 +1,16 @@
+# --- Server / UI ---
+Flask==2.3.3
+Flask-SocketIO==5.3.6
+python-socketio==5.10.0
+opencv-python==4.8.1.78
+numpy==1.24.4
+pyzbar==0.1.9
+pymysql==1.1.0
+
+# --- DB ---
+mysql-connector-python==8.3.0
+
+# --- ROS2  ---
+# rclpy
+# std_msgs
+# dsr_msgs2

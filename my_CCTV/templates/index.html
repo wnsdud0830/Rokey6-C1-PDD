@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Hospital Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* --- CSS 스타일 정의 --- */
+        
+        /* 전역 변수 설정 (색상 테마 통일) */
+        :root { --primary-color: #4F46E5; --bg-color: #F3F4F6; --card-bg: #FFFFFF; --text-main: #1F2937; }
+        
+        /* 전체 레이아웃 */
+        body { margin: 0; background: var(--bg-color); color: var(--text-main); font-family: 'Inter', sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        
+        /* 상단 헤더 스타일 */
+        header { background: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        
+        /* 대시보드 그리드 레이아웃 (3단 분할) */
+        .dashboard-container { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; padding: 20px; height: calc(100vh - 60px); }
+        
+        /* 카드(박스) 디자인 */
+        .card { background: white; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        .card-header { padding: 15px 20px; border-bottom: 1px solid #E5E7EB; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .card-body { padding: 20px; flex: 1; overflow-y: auto; }
+        
+        /* 로그 출력 박스 (검은 배경, 초록 글씨) */
+        #qr-log-box { margin-top: 15px; background: #1F2937; color: #10B981; padding: 15px; border-radius: 8px; font-family: 'Consolas', monospace; height: 150px; overflow-y: auto; }
+        
+        /* 환자 스케줄 테이블 스타일 */
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th { background: var(--primary-color); color: white; padding: 10px; }
+        td { padding: 10px; border-bottom: 1px solid #E5E7EB; text-align: center; }
+        /* 현재 요일 강조 스타일 (오렌지색 테두리) */
+        .row-active { background-color: #FFF7ED; font-weight: bold; border-left: 4px solid #F97316; }
+
+        /* 각종 버튼 스타일 */
+        .btn-edit { background: #EFF6FF; border: 1px solid #BFDBFE; color: #2563EB; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .btn-edit:hover { background: #2563EB; color: white; }
+        
+        .btn-reset { background-color: #EF4444; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem; transition: background 0.2s; }
+        .btn-reset:hover { background-color: #DC2626; }
+
+        /* 팝업 모달창 스타일 (기본적으로는 숨김 상태) */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(3px); z-index: 999; justify-content: center; align-items: center; }
+        .modal-box { background: white; padding: 30px; width: 420px; border-radius: 16px; box-shadow: 0 20px 25px rgba(0,0,0,0.15); animation: popUp 0.3s ease; }
+        @keyframes popUp { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        .btn-group { display: flex; justify-content: center; gap: 10px; margin-top: 20px; }
+        .btn-main { background: var(--primary-color); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .btn-sub { background: #E5E7EB; color: #374151; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        
+        .form-row { margin-bottom: 15px; text-align: left; }
+        .form-label { display: block; font-size: 0.85rem; color: #6B7280; margin-bottom: 5px; }
+        .form-input { width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 8px; box-sizing: border-box; }
+
+        /* 요일 선택 버튼 스타일 (월~일) */
+        .day-selector { display: flex; gap: 5px; justify-content: center; margin-bottom: 20px; background: #F3F4F6; padding: 5px; border-radius: 10px; }
+        .day-btn { flex: 1; border: none; background: transparent; padding: 8px 0; border-radius: 8px; font-size: 0.8rem; font-weight: bold; cursor: pointer; color: #6B7280; }
+        .day-btn:hover { background: #E5E7EB; }
+        .day-btn.active { background: white; color: var(--primary-color); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🏥 Smart Hospital Dashboard</h1>
+        <div style="display:flex; align-items:center; gap:15px;">
+            <div style="font-weight:bold; color:#4F46E5;">● System Ready</div>
+            <button class="btn-reset" onclick="forceReset()">🔄 Reset System</button>
+        </div>
+    </header>
+
+    <div id="confirmModal" class="modal-overlay">
+        <div class="modal-box" style="text-align: center; border-top: 6px solid #4F46E5;">
+            <h2 style="margin-top:0;">📦 배송 도착</h2>
+            <p>물품이 정확합니까?</p>
+            <div class="btn-group">
+                <button class="btn-sub" onclick="closeConfirm(false)">아니오</button>
+                <button class="btn-main" onclick="closeConfirm(true)">수령 확인</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="editModal" class="modal-overlay">
+        <div class="modal-box">
+            <h2 style="margin-top:0; text-align:center; margin-bottom:10px;">🛠️ 처방 정보 수정</h2>
+            
+            <div id="scan_guide_msg" style="text-align:center; padding: 20px; background:#F3F4F6; border-radius:8px; margin-bottom:15px;">
+                <div style="font-size:3rem;">📷</div>
+                <h3 style="color:#4F46E5; margin:10px 0;">QR 코드를 스캔하세요</h3>
+            </div>
+
+            <div id="edit_form_area" style="display: none;">
+                <p style="text-align:center; font-size:1.1rem; font-weight:bold; color:#4F46E5; margin-bottom:15px;">
+                    <span id="found_name">-</span> 님의 처방 정보
+                </p>
+
+                <div class="day-selector">
+                    <button class="day-btn" onclick="selectDay('Mon')">Mon</button>
+                    <button class="day-btn" onclick="selectDay('Tue')">Tue</button>
+                    <button class="day-btn" onclick="selectDay('Wed')">Wed</button>
+                    <button class="day-btn" onclick="selectDay('Thu')">Thu</button>
+                    <button class="day-btn" onclick="selectDay('Fri')">Fri</button>
+                    <button class="day-btn" onclick="selectDay('Sat')">Sat</button>
+                    <button class="day-btn" onclick="selectDay('Sun')">Sun</button>
+                </div>
+                
+                <div class="form-row">
+                    <label class="form-label">💊 Pill</label>
+                    <input type="text" id="inp_pill" class="form-input">
+                </div>
+                <div class="form-row">
+                    <label class="form-label">💧 Liquid</label>
+                    <input type="text" id="inp_liq" class="form-input">
+                </div>
+                <div class="form-row">
+                    <label class="form-label">📦 Supply</label>
+                    <input type="text" id="inp_sup" class="form-input">
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn-sub" onclick="closeEdit()">닫기 (완료)</button>
+                    <button class="btn-main" onclick="submitEdit()">저장하기</button>
+                </div>
+            </div>
+            
+            <div id="initial_close_btn" class="btn-group" style="margin-top:10px;">
+                <button class="btn-sub" onclick="closeEdit()">취소</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-container">
+        <div class="card">
+            <div class="card-header">📷 QR Scanner</div>
+            <div class="card-body">
+                <img id="qr_view" style="width:100%; border-radius:8px; background:#eee;" src="">
+                <div id="qr-log-box"><div>[SYSTEM] Ready...</div></div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">🤖 Robot View</div>
+            <div class="card-body">
+                <img id="robot_view" style="width:100%; height:100%; object-fit:cover; border-radius:8px; background:#eee;" src="">
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                📋 Patient Info
+                <button class="btn-edit" onclick="openEdit()">Search & Edit</button>
+            </div>
+            <div class="card-body">
+                <div style="margin-bottom:15px;">
+                    <div style="font-size:0.8rem; color:#6B7280;">PATIENT ID</div>
+                    <div style="font-size:1.3rem; font-weight:800; color:#374151;" id="p_id">-</div>
+                </div>
+
+                <div style="margin-bottom:15px;">
+                    <div style="font-size:0.8rem; color:#6B7280;">NAME</div>
+                    <div style="font-size:1.5rem; font-weight:bold; color:#4F46E5;" id="p_name">-</div>
+                </div>
+                <div style="margin-bottom:15px;">
+                    <div style="font-size:0.8rem; color:#6B7280;">DIAGNOSIS</div>
+                    <div style="font-size:1.1rem; font-weight:500;" id="p_disease">-</div>
+                </div>
+                <table id="schedule_table">
+                    <thead><tr><th>Day</th><th>Pill</th><th>Liq</th><th>Item</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 서버 연결 시작
+        const socket = io();
+        
+        // --- [A] 배송 확인 (PopUp) 로직 ---
+        const confirmModal = document.getElementById('confirmModal');
+        
+        // 서버에서 'popup_open' 신호를 받으면 모달창 띄움 (로봇 도착 시)
+        socket.on('popup_open', () => confirmModal.style.display = 'flex');
+
+        // 수령 확인 버튼 클릭 시
+        function closeConfirm(isConfirmed) {
+            confirmModal.style.display = 'none';
+            if(isConfirmed) {
+                // 서버에 리셋 신호 전송 (다음 작업을 위해 초기화)
+                socket.emit('system_reset'); 
+            } else {
+                addLog("⚠️ 수령 거부. 잠금 유지.");
+            }
+        }
+
+        // --- [B] 검색 & 수정 (Modal) 로직 ---
+        const editModal = document.getElementById('editModal');
+        const editFormArea = document.getElementById('edit_form_area');
+        const initialCloseBtn = document.getElementById('initial_close_btn');
+        const scanGuideMsg = document.getElementById('scan_guide_msg');
+        
+        let currentEditQR = null;   // 현재 수정 중인 QR 코드 저장
+        let currentEditDay = null;  // 현재 선택된 요일 저장
+
+        // 1. 수정창 열기 (QR 인식 모드로 전환)
+        function openEdit() {
+            editModal.style.display = 'flex';
+            // 초기 상태: "QR을 찍으세요" 안내 보이기, 입력폼 숨기기
+            scanGuideMsg.style.display = 'block';
+            editFormArea.style.display = 'none';
+            initialCloseBtn.style.display = 'flex';
+            
+            // 서버에 수정 모드 시작 알림 (로봇 동작 방지)
+            socket.emit('start_edit_mode');
+            addLog("✏️ [MODE] 수정 모드 시작: QR을 스캔하세요.");
+        }
+
+        // 2. 수정창 닫기 (일반 모드로 복귀)
+        function closeEdit() { 
+            editModal.style.display = 'none';
+            socket.emit('stop_edit_mode'); // 서버에 수정 모드 종료 알림
+            addLog("✅ [MODE] 수정 모드 종료");
+        }
+
+        // 3. QR 인식 결과 수신 (인식이 되면 자동으로 입력폼이 열림)
+        socket.on('search_result', data => {
+            if(data.found) {
+                currentEditQR = data.qr_code;
+                document.getElementById('found_name').innerText = data.name;
+                
+                // UI 전환: 안내 문구 숨기고, 입력폼 표시
+                scanGuideMsg.style.display = 'none';
+                initialCloseBtn.style.display = 'none';
+                editFormArea.style.display = 'block';
+                
+                selectDay(data.day); // 오늘 요일 데이터 자동 로드
+                addLog(`🔍 ${data.name}님 정보 수정 준비 완료`);
+            }
+        });
+
+        // 4. 요일 버튼 클릭 시 동작
+        function selectDay(day) {
+            currentEditDay = day;
+            // 버튼 스타일 업데이트 (선택된 요일만 active 클래스)
+            document.querySelectorAll('.day-btn').forEach(btn => {
+                if(btn.innerText === day) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+            // 서버에 해당 요일 데이터 요청
+            socket.emit('req_change_day', { qr: currentEditQR, day: day });
+        }
+
+        // 5. 서버로부터 요일별 데이터 수신 -> 입력폼 채우기
+        socket.on('res_day_data', data => {
+            document.getElementById('inp_pill').value = data.pill;
+            document.getElementById('inp_liq').value = data.liquid;
+            document.getElementById('inp_sup').value = data.supply;
+        });
+
+        // 6. 저장하기 버튼 클릭 -> 서버로 데이터 전송
+        function submitEdit() {
+            socket.emit('req_edit_info', {
+                qr: currentEditQR,
+                day: currentEditDay,
+                pill: document.getElementById('inp_pill').value,
+                liquid: document.getElementById('inp_liq').value,
+                supply: document.getElementById('inp_sup').value
+            });
+            // 창을 닫지 않고 알림만 띄워 연속 수정 가능하게 함
+            alert("데이터가 저장되었습니다.");
+        }
+
+        // --- [C] 강제 리셋 (Force Reset) ---
+        // 시스템이 꼬였을 때 사용하는 비상 버튼
+        function forceReset() {
+            if(confirm("시스템이 멈췄나요? 강제로 초기화하시겠습니까?")) {
+                socket.emit('force_reset');
+            }
+        }
+        
+        // --- [중요] 화면 초기화 로직 ---
+        // '수령 확인' 또는 '강제 리셋' 시 서버에서 이 신호를 보냄
+        socket.on('clear_ui', () => {
+            confirmModal.style.display = 'none';
+            editModal.style.display = 'none';
+            
+            // 1. 환자 정보 텍스트 초기화
+            document.getElementById('p_id').innerText = "-";
+            document.getElementById('p_name').innerText = "-";
+            document.getElementById('p_disease').innerText = "-";
+            
+            // 2. 테이블 비우기
+            document.querySelector('#schedule_table tbody').innerHTML = "";
+            
+            // 3. 로그 박스 초기화
+            const logBox = document.getElementById('qr-log-box');
+            logBox.innerHTML = "<div>[SYSTEM] Ready...</div>";
+        });
+
+        // --- [D] 메인 화면 업데이트 (일반 모드 QR 스캔 시) ---
+        socket.on('update_data', data => {
+            document.getElementById('p_id').innerText = data.qr_code; // ID 표시
+            document.getElementById('p_name').innerText = data.name;
+            document.getElementById('p_disease').innerText = data.disease;
+            
+            // 주간 일정 테이블 그리기
+            const tbody = document.querySelector('#schedule_table tbody');
+            tbody.innerHTML = '';
+            if(data.weekly_schedule) {
+                data.weekly_schedule.forEach(row => {
+                    const tr = document.createElement('tr');
+                    // 오늘 요일이면 강조 스타일(row-active) 적용
+                    if(row.day === data.day) tr.className = "row-active";
+                    tr.innerHTML = `<td>${row.day}</td><td>${row.pill}</td><td>${row.liquid}</td><td>${row.supply}</td>`;
+                    tbody.appendChild(tr);
+                });
+            }
+        });
+
+        // --- [E] 공통 기능 (로그, 영상 스트리밍) ---
+        
+        // 로그 추가 함수 (자동 스크롤 기능 포함)
+        function addLog(text) {
+            const div = document.createElement('div');
+            const time = new Date().toLocaleTimeString('ko-KR', {hour12:false});
+            div.innerText = `> [${time}] ${text}`;
+            const box = document.getElementById('qr-log-box');
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight; // 스크롤을 항상 맨 아래로
+        }
+
+        // Base64 이미지 수신 -> img 태그 src 업데이트
+        socket.on('video_feed_qr', data => document.getElementById('qr_view').src = "data:image/jpeg;base64," + data.image);
+        socket.on('video_feed_cam2', data => document.getElementById('robot_view').src = "data:image/jpeg;base64," + data.image);
+        
+        // 서버에서 보내는 로그 메시지 수신
+        socket.on('ros_log', data => addLog(data.msg));
+        socket.on('new_log', data => addLog(data.log));
+    </script>
+</body>
+</html>
