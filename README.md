@@ -9,9 +9,7 @@
 ## 1. 시스템 설계, 플로우 차트 그림
 
 ### 1-1. 시스템 설계도 (System Architecture)
-<p align="center">
-  <img src="./images/system_architecture.png" alt="System Architecture" width="780">
-</p>
+![System Architecture](./readme_with_images/images/system_architecture.png)
 
 **구성 요약**
 - **ROS2 제어 파트(로봇 PC)**
@@ -35,18 +33,14 @@
 > 예시: ROBOT_ID가 `dsr01`이면 `/dsr01/robot_cmd`, `/dsr01/monitor_cmd`.
 
 ### 1-2. 플로우 차트 (Flow Chart)
-<p align="center">
-  <img src="./images/flowchart.png" alt="Flow Chart" width="780">
-</p>
+![Flow Chart](./readme_with_images/images/flowchart.png)
 
 - 웹 UI에서 QR 인식 → DB 조회 → 실행 가능 상태이면 `robot_cmd(qr_code)` 발행
 - 로봇 노드는 `system_busy` 잠금으로 **동시 실행을 방지**하고, 워커 스레드에서 시퀀스를 실행
 - 완료 시 `monitor_cmd`로 `finish`를 보내 UI가 다음 입력을 받을 수 있도록 전환
 
 ### 1-3. 노드 아키텍처 (Node Architecture)
-<p align="center">
-  <img src="./images/node_architecture.png" alt="Node Architecture" width="780">
-</p>
+![Node Architecture](./readme_with_images/images/node_architecture.png)
 
 - **Server Process (app.py)**
   - QR Camera Thread (Scan & Decode)
